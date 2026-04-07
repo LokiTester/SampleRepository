@@ -127,3 +127,162 @@ Sub Stop_Auto_Refresh()
         Procedure:="Start_Auto_Refresh", Schedule:=False
 
 End Sub
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Option Explicit
+
+Dim LWSSO_COOKIE As String
+Dim QCSession As String
+
+Const PROXY_URL As String = "ncproxy:8080"
+Const PROXY_USER As String = "UID"
+Const PROXY_PASS As String = "password"
+
+Const BASE_URL As String = "https://your-octane-url"
+
+
+' 🔁 MAIN
+Sub Fetch_Octane_Data()
+
+    Call Login_Octane
+    Call Get_Test_Count
+
+End Sub
+
+
+' 🔐 LOGIN WITH PROXY
+Sub Login_Octane()
+
+    Dim http As Object
+    Dim url As String
+    Dim responseHeaders As String
+    
+    url = BASE_URL & "/authentication/sign_in"
+    
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    
+    http.Open "POST", url, False
+    
+    ' 🌐 Set Proxy
+    http.SetProxy 2, PROXY_URL
+    
+    ' 🔑 Proxy Authentication
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0   ' 0 = proxy auth
+    
+    http.setRequestHeader "Content-Type", "application/json"
+    
+    Dim body As String
+    body = "{""client_id"":""euruenbdiebdhejbdje"",""client_secret"":""biebj283bwu72@£&378beh""}"
+    
+    http.Send body
+    
+    responseHeaders = http.GetAllResponseHeaders
+    
+    ' Extract cookies
+    LWSSO_COOKIE = ExtractCookie(responseHeaders, "LWSSO_COOKIE_KEY")
+    QCSession = ExtractCookie(responseHeaders, "QCSession")
+
+End Sub
+
+
+' 📊 GET DATA WITH PROXY
+Sub Get_Test_Count()
+
+    Dim http As Object
+    Dim url As String
+    Dim response As String
+    Dim totalCount As String
+    
+    url = BASE_URL & "/api/shared_spaces/1001/workspaces/2001/tests?limit=1&total_count=true&query=""(subtype='automated')"""
+    
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    
+    http.Open "GET", url, False
+    
+    ' 🌐 Proxy
+    http.SetProxy 2, PROXY_URL
+    
+    ' 🔑 Proxy auth
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    
+    ' 🍪 Attach cookies
+    http.setRequestHeader "Cookie", "LWSSO_COOKIE_KEY=" & LWSSO_COOKIE & "; QCSession=" & QCSession
+    
+    http.Send
+    
+    response = http.ResponseText
+    
+    totalCount = ExtractTotalCount(response)
+    
+    ' Write to Excel
+    Sheet1.Range("A1").Value = "Automated Test Count"
+    Sheet1.Range("B1").Value = totalCount
+    Sheet1.Range("A2").Value = "Last Updated"
+    Sheet1.Range("B2").Value = Now()
+
+End Sub
+
+
+' 🍪 COOKIE PARSER
+Function ExtractCookie(headers As String, cookieName As String) As String
+
+    Dim lines() As String
+    Dim i As Integer
+    
+    lines = Split(headers, vbCrLf)
+    
+    For i = 0 To UBound(lines)
+        If InStr(lines(i), cookieName) > 0 Then
+            ExtractCookie = Split(Split(lines(i), cookieName & "=")(1), ";")(0)
+            Exit Function
+        End If
+    Next i
+
+End Function
+
+
+' 🔍 JSON PARSER
+Function ExtractTotalCount(response As String) As String
+
+    Dim startPos As Long
+    Dim endPos As Long
+    
+    startPos = InStr(response, """total_count"":") + Len("""total_count"":")
+    endPos = InStr(startPos, response, ",")
+    
+    ExtractTotalCount = Trim(Mid(response, startPos, endPos - startPos))
+
+End Function
+
+
+' 🔁 AUTO REFRESH (5 mins)
+Sub Start_Auto_Refresh()
+
+    Call Fetch_Octane_Data
+    
+    Application.OnTime Now + TimeValue("00:05:00"), "Start_Auto_Refresh"
+
+End Sub
+
+
+' 🛑 STOP
+Sub Stop_Auto_Refresh()
+
+    On Error Resume Next
+    Application.OnTime EarliestTime:=Now + TimeValue("00:05:00"), _
+        Procedure:="Start_Auto_Refresh", Schedule:=False
+
+End Sub
