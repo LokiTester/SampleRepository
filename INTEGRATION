@@ -101,3 +101,107 @@ Sub Start_Auto_Refresh()
     Application.OnTime Now + TimeValue("00:05:00"), "Start_Auto_Refresh"
 
 End Sub
+
+
+
+
+
+
+
+
+
+
+
+
+Option Explicit
+
+Const BASE_URL As String = "https://almoctane-eur.saas.microfocus.com"
+Const PROXY_URL As String = "ncproxy:8080"
+Const PROXY_USER As String = "h51721"
+Const PROXY_PASS As String = "Test51734@Loki"
+
+Const CLIENT_ID As String = "your_client_id"
+Const CLIENT_SECRET As String = "your_secret"
+
+
+' 🔁 MAIN
+Sub Fetch_Octane_Data()
+
+    Dim http As Object
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    
+    ' Proxy
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    
+    ' Login + Fetch
+    Call Login(http)
+    Call Get_Test_Count(http)
+
+End Sub
+
+
+' 🔐 LOGIN
+Sub Login(http As Object)
+
+    Dim url As String
+    Dim body As String
+    
+    url = BASE_URL & "/authentication/sign_in"
+    
+    http.Open "POST", url, False
+    http.setRequestHeader "Content-Type", "application/json"
+    
+    body = "{""client_id"":""" & CLIENT_ID & """,""client_secret"":""" & CLIENT_SECRET & """}"
+    
+    http.Send body
+    
+    If http.Status <> 200 Then
+        MsgBox "Login Failed: " & http.Status & " - " & http.StatusText
+        Exit Sub
+    End If
+
+End Sub
+
+
+' 📊 GET DATA
+Sub Get_Test_Count(http As Object)
+
+    Dim url As String
+    Dim response As String
+    Dim totalCount As String
+    
+    url = BASE_URL & "/api/shared_spaces/501007/workspaces/3001/tests?limit=1&total_count=true&query=""(user_tags={id=105001})"""
+    
+    http.Open "GET", url, False
+    http.setRequestHeader "ALM-OCTANE-TECH-PREVIEW", "false"
+    
+    http.Send
+    
+    If http.Status <> 200 Then
+        MsgBox "API Failed: " & http.Status & " - " & http.StatusText
+        Exit Sub
+    End If
+    
+    response = http.ResponseText
+    
+    totalCount = ExtractTotalCount(response)
+    
+    Sheet1.Range("A1").Value = "Automated Test Count"
+    Sheet1.Range("B1").Value = totalCount
+
+End Sub
+
+
+' 🔍 PARSE
+Function ExtractTotalCount(response As String) As String
+
+    Dim startPos As Long
+    Dim endPos As Long
+    
+    startPos = InStr(response, """total_count"":") + Len("""total_count"":")
+    endPos = InStr(startPos, response, ",")
+    
+    ExtractTotalCount = Trim(Mid(response, startPos, endPos - startPos))
+
+End Function
