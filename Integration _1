@@ -1,0 +1,188 @@
+Option Explicit
+
+Const BASE_URL As String = "https://almoctane-eur.saas.microfocus.com"
+Const PROXY_URL As String = "ncproxy:8080"
+Const PROXY_USER As String = "h51721"
+Const PROXY_PASS As String = "Test"
+Const CLIENT_ID As String = "ITT_AP10647_Test"
+Const CLIENT_SECRET As String = "4y?YF0"
+Const SHARED_SPACE As String = "501007"
+Const WORKSPACE As String = "3001"
+
+' =============================
+' TARGET CHART CONFIGURATION
+' Change these to match your PPT
+' =============================
+Const TARGET_SLIDE As Integer = 3          ' <-- Set your slide number
+Const TARGET_CHART_NAME As String = "Chart 4"  ' <-- Set your chart name from Selection Pane
+
+' Chart data cell positions (row, col) in the chart's embedded sheet
+' These match: TC_Automated, TC_Automatable, TC_RegressionScope
+Const ROW_DATA As Integer = 2   ' Row where counts sit (usually row 2)
+Const COL_AUTOMATED As Integer = 2    ' Column B
+Const COL_AUTOMATABLE As Integer = 3  ' Column C
+Const COL_REGRESSION As Integer = 4   ' Column D
+
+
+' ============
+'  MAIN
+' ============
+Sub Fetch_And_Update_ShineChart()
+
+    Dim http As Object
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+
+    ' Step 1: Login
+    Call Login(http)
+
+    ' Step 2: Fetch each count from Octane
+    Dim countAutomated As Long
+    Dim countAutomatable As Long
+    Dim countRegression As Long
+
+    countAutomated  = FetchCount(http, "105001")   ' Automated tag ID
+    countAutomatable = FetchCount(http, "178015")  ' Automatable tag ID
+    countRegression = FetchCount(http, "177007")   ' Regression Scope tag ID
+
+    ' Step 3: Write into the Shine chart's embedded data sheet
+    Call UpdateShineChart(countAutomated, countAutomatable, countRegression)
+
+    MsgBox "Shine Chart updated successfully!" & vbNewLine & _
+           "TC_Automated: " & countAutomated & vbNewLine & _
+           "TC_Automatable: " & countAutomatable & vbNewLine & _
+           "TC_RegressionScope: " & countRegression
+
+End Sub
+
+
+' ============
+'  LOGIN
+' ============
+Sub Login(http As Object)
+
+    Dim url As String
+    Dim body As String
+
+    url = BASE_URL & "/authentication/sign_in"
+
+    http.Open "POST", url, False
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    http.setRequestHeader "Content-Type", "application/json"
+
+    body = "{""client_id"":""" & CLIENT_ID & """,""client_secret"":""" & CLIENT_SECRET & """}"
+    http.Send body
+
+    If http.Status <> 200 Then
+        MsgBox "Login Failed: " & http.Status & " - " & http.StatusText
+        End
+    End If
+
+End Sub
+
+
+' ========================
+'  FETCH COUNT (returns Long)
+' ========================
+Function FetchCount(http As Object, tagId As String) As Long
+
+    Dim url As String
+    Dim response As String
+
+    ' Re-create http object per request (same as your working script)
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+
+    url = BASE_URL & "/api/shared_spaces/" & SHARED_SPACE & _
+          "/workspaces/" & WORKSPACE & _
+          "/tests?limit=1&total_count=true&query=""(user_tags={id=" & tagId & "})"""
+
+    http.Open "GET", url, False
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    http.setRequestHeader "ALM-OCTANE-TECH-PREVIEW", "false"
+    http.Send
+
+    If http.Status <> 200 Then
+        MsgBox "API Error for tag " & tagId & ": " & http.Status & " - " & http.StatusText
+        FetchCount = 0
+        Exit Function
+    End If
+
+    response = http.ResponseText
+    FetchCount = CLng(ExtractTotalCount(response))
+
+End Function
+
+
+' ================================
+'  UPDATE THE SHINE CHART IN PPT
+' ================================
+Sub UpdateShineChart(automated As Long, automatable As Long, regression As Long)
+
+    Dim oSlide As Slide
+    Dim oShape As Shape
+    Dim oChart As Chart
+    Dim oChartData As ChartData
+    Dim oWorkbook As Object   ' Embedded Excel workbook
+    Dim oSheet As Object      ' Embedded Excel sheet
+
+    ' --- Find the correct slide ---
+    Set oSlide = ActivePresentation.Slides(TARGET_SLIDE)
+
+    ' --- Find the chart by name (safe across reordering) ---
+    Dim found As Boolean
+    found = False
+
+    For Each oShape In oSlide.Shapes
+        If oShape.Name = TARGET_CHART_NAME Then
+            If oShape.HasChart Then
+                found = True
+
+                ' Activate the chart's embedded data
+                Set oChart = oShape.Chart
+                Set oChartData = oChart.ChartData
+                oChartData.Activate   ' Opens the embedded Excel workbook
+
+                ' Access the embedded workbook/sheet
+                Set oWorkbook = oChartData.Workbook
+                Set oSheet = oWorkbook.Sheets(1)  ' First (and usually only) sheet
+
+                ' --- Write the fetched values into chart data cells ---
+                oSheet.Cells(ROW_DATA, COL_AUTOMATED).Value  = automated
+                oSheet.Cells(ROW_DATA, COL_AUTOMATABLE).Value = automatable
+                oSheet.Cells(ROW_DATA, COL_REGRESSION).Value  = regression
+
+                ' Refresh chart to reflect new data
+                oChart.Refresh
+
+                ' Close embedded workbook
+                oChartData.Workbook.Close
+
+                MsgBox "Chart '" & TARGET_CHART_NAME & "' updated on Slide " & TARGET_SLIDE
+            End If
+            Exit For
+        End If
+    Next oShape
+
+    If Not found Then
+        MsgBox "ERROR: Chart named '" & TARGET_CHART_NAME & "' not found on Slide " & TARGET_SLIDE & "." & vbNewLine & _
+               "Check the chart name in Selection Pane (Home → Arrange → Selection Pane)."
+    End If
+
+End Sub
+
+
+' ========================
+'  PARSE total_count
+' ========================
+Function ExtractTotalCount(response As String) As String
+
+    Dim startPos As Long
+    Dim endPos As Long
+
+    startPos = InStr(response, """total_count"":") + Len("""total_count"":")
+    endPos = InStr(startPos, response, ",")
+
+    ExtractTotalCount = Trim(Mid(response, startPos, endPos - startPos))
+
+End Function
