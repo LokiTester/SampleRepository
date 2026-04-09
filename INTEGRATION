@@ -2,35 +2,41 @@ Option Explicit
 
 Const BASE_URL As String = "https://almoctane-eur.saas.microfocus.com"
 Const PROXY_URL As String = "ncproxy:8080"
-Const PROXY_USER As String = "UID"
-Const PROXY_PASS As String = "password"
+Const PROXY_USER As String = "h51721"
+Const PROXY_PASS As String = "Test51734@Loki"
 
-Const CLIENT_ID As String = "ITT_AP1064tegrationn16a75mmmq9vj5"
-Const CLIENT_SECRET As String = "4yYF0cdAo"
+Const CLIENT_ID As String = "your_client_id"
+Const CLIENT_SECRET As String = "your_secret"
 
-Dim http As Object
+Const SHARED_SPACE As String = "501007"
+Const WORKSPACE As String = "3001"
 
 
-' 🔁 MAIN FUNCTION
-Sub Fetch_Octane_Data()
+' 🔁 MAIN
+Sub Fetch_All_Counts()
 
+    Dim http As Object
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
     
-    ' Enable proxy
-    http.SetProxy 2, PROXY_URL
-    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    ' Login once
+    Call Login(http)
     
-    ' Step 1: Login
-    Call Login
+    ' Fetch counts
+    Sheet1.Range("A1:B10").ClearContents
     
-    ' Step 2: Get Data
-    Call Get_Test_Count
+    WriteCount "Regression Scope", "177007", 1
+    WriteCount "Automated", "105001", 2
+    WriteCount "Not Automatable", "131002", 3
+    WriteCount "Automatable", "178015", 4
+    
+    Sheet1.Range("A6").Value = "Last Updated"
+    Sheet1.Range("B6").Value = Now()
 
 End Sub
 
 
-' 🔐 LOGIN (SESSION CREATED INTERNALLY)
-Sub Login()
+' 🔐 LOGIN
+Sub Login(http As Object)
 
     Dim url As String
     Dim body As String
@@ -38,30 +44,34 @@ Sub Login()
     url = BASE_URL & "/authentication/sign_in"
     
     http.Open "POST", url, False
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
     http.setRequestHeader "Content-Type", "application/json"
     
     body = "{""client_id"":""" & CLIENT_ID & """,""client_secret"":""" & CLIENT_SECRET & """}"
     
     http.Send body
-    
-    ' Debug
-    Debug.Print http.Status, http.StatusText
-    
+
 End Sub
 
 
-' 📊 FETCH DATA
-Sub Get_Test_Count()
+' 📊 GENERIC COUNT FUNCTION
+Sub WriteCount(label As String, tagId As String, rowNum As Integer)
 
+    Dim http As Object
     Dim url As String
     Dim response As String
     Dim totalCount As String
     
-    url = BASE_URL & "/api/shared_spaces/501007/workspaces/3001/tests?limit=1&total_count=true&query=""(user_tags={id=105001})"""
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    
+    url = BASE_URL & "/api/shared_spaces/" & SHARED_SPACE & _
+          "/workspaces/" & WORKSPACE & _
+          "/tests?limit=1&total_count=true&query=""(user_tags={id=" & tagId & "})"""
     
     http.Open "GET", url, False
-    
-    ' Required header
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
     http.setRequestHeader "ALM-OCTANE-TECH-PREVIEW", "false"
     
     http.Send
@@ -70,11 +80,9 @@ Sub Get_Test_Count()
     
     totalCount = ExtractTotalCount(response)
     
-    ' Output to Excel
-    Sheet1.Range("A1").Value = "Automated Test Count"
-    Sheet1.Range("B1").Value = totalCount
-    Sheet1.Range("A2").Value = "Last Updated"
-    Sheet1.Range("B2").Value = Now()
+    ' Write to Excel
+    Sheet1.Range("A" & rowNum).Value = label
+    Sheet1.Range("B" & rowNum).Value = totalCount
 
 End Sub
 
@@ -93,14 +101,7 @@ Function ExtractTotalCount(response As String) As String
 End Function
 
 
-' 🔁 AUTO REFRESH
-Sub Start_Auto_Refresh()
 
-    Call Fetch_Octane_Data
-    
-    Application.OnTime Now + TimeValue("00:05:00"), "Start_Auto_Refresh"
-
-End Sub
 
 
 
