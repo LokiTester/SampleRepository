@@ -190,6 +190,16 @@ End Function
 
 
 
+
+
+
+ url = BASE_URL & "/api/shared_spaces/" & SHARED_SPACE & _
+          "/workspaces/" & WORKSPACE & _
+          "/tests?limit=1&total_count=true&query=" & _
+          """(user_tags={id=" & tag1 & "};user_tags={id=" & tag2 & "})"""
+
+
+
     ' -----------------------------------------------
                 ' STEP A: Copy A6:D12 and paste values into A2:D8
                 ' (shift-up the historical rows before adding new month)
