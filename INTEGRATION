@@ -1,225 +1,68 @@
 Option Explicit
 
-Dim LWSSO_COOKIE As String
-Dim QCSession As String
-
-' 🔁 MAIN FUNCTION (Call this)
-Sub Fetch_Octane_Data()
-
-    Call Login_Octane
-    Call Get_Test_Count
-
-End Sub
-
-
-' 🔐 STEP 1: LOGIN
-Sub Login_Octane()
-
-    Dim http As Object
-    Dim url As String
-    Dim responseHeaders As String
-    
-    url = "https://your-octane-url/authentication/sign_in"
-    
-    Set http = CreateObject("MSXML2.XMLHTTP")
-    
-    http.Open "POST", url, False
-    http.setRequestHeader "Content-Type", "application/json"
-    
-    ' Client ID + Secret
-    Dim body As String
-    body = "{""client_id"":""euruenbdiebdhejbdje"",""client_secret"":""biebj283bwu72@£&378beh""}"
-    
-    http.send body
-    
-    ' Get headers
-    responseHeaders = http.getAllResponseHeaders
-    
-    ' Extract cookies
-    LWSSO_COOKIE = ExtractCookie(responseHeaders, "LWSSO_COOKIE_KEY")
-    QCSession = ExtractCookie(responseHeaders, "QCSession")
-    
-End Sub
-
-
-' 🍪 COOKIE EXTRACTOR
-Function ExtractCookie(headers As String, cookieName As String) As String
-
-    Dim lines() As String
-    Dim i As Integer
-    
-    lines = Split(headers, vbCrLf)
-    
-    For i = 0 To UBound(lines)
-        If InStr(lines(i), cookieName) > 0 Then
-            ExtractCookie = Split(Split(lines(i), cookieName & "=")(1), ";")(0)
-            Exit Function
-        End If
-    Next i
-
-End Function
-
-
-' 📊 STEP 2: GET TEST COUNT
-Sub Get_Test_Count()
-
-    Dim http As Object
-    Dim url As String
-    Dim response As String
-    Dim totalCount As String
-    
-    url = "https://your-octane-url/api/shared_spaces/1001/workspaces/2001/tests?limit=1&total_count=true&query=""(subtype='automated')"""
-    
-    Set http = CreateObject("MSXML2.XMLHTTP")
-    
-    http.Open "GET", url, False
-    
-    ' Attach cookies
-    http.setRequestHeader "Cookie", "LWSSO_COOKIE_KEY=" & LWSSO_COOKIE & "; QCSession=" & QCSession
-    
-    http.send
-    
-    response = http.responseText
-    
-    ' Extract total_count
-    totalCount = ExtractTotalCount(response)
-    
-    ' Write to Excel
-    Sheet1.Range("A1").Value = "Automated Test Count"
-    Sheet1.Range("B1").Value = totalCount
-    Sheet1.Range("A2").Value = "Last Updated"
-    Sheet1.Range("B2").Value = Now()
-
-End Sub
-
-
-' 🔍 PARSE total_count FROM JSON
-Function ExtractTotalCount(response As String) As String
-
-    Dim startPos As Integer
-    Dim endPos As Integer
-    
-    startPos = InStr(response, """total_count"":") + Len("""total_count"":")
-    endPos = InStr(startPos, response, ",")
-    
-    ExtractTotalCount = Trim(Mid(response, startPos, endPos - startPos))
-
-End Function
-
-
-' 🔁 AUTO REFRESH EVERY X MINUTES
-Sub Start_Auto_Refresh()
-
-    ' Run immediately
-    Call Fetch_Octane_Data
-    
-    ' Schedule next run (every 5 minutes)
-    Application.OnTime Now + TimeValue("00:05:00"), "Start_Auto_Refresh"
-
-End Sub
-
-
-' 🛑 STOP AUTO REFRESH
-Sub Stop_Auto_Refresh()
-
-    On Error Resume Next
-    Application.OnTime EarliestTime:=Now + TimeValue("00:05:00"), _
-        Procedure:="Start_Auto_Refresh", Schedule:=False
-
-End Sub
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Option Explicit
-
-Dim LWSSO_COOKIE As String
-Dim QCSession As String
-
+Const BASE_URL As String = "https://almoctane-eur.saas.microfocus.com"
 Const PROXY_URL As String = "ncproxy:8080"
 Const PROXY_USER As String = "UID"
 Const PROXY_PASS As String = "password"
 
-Const BASE_URL As String = "https://your-octane-url"
+Const CLIENT_ID As String = "ITT_AP1064tegrationn16a75mmmq9vj5"
+Const CLIENT_SECRET As String = "4yYF0cdAo"
+
+Dim http As Object
 
 
-' 🔁 MAIN
+' 🔁 MAIN FUNCTION
 Sub Fetch_Octane_Data()
 
-    Call Login_Octane
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    
+    ' Enable proxy
+    http.SetProxy 2, PROXY_URL
+    http.SetCredentials PROXY_USER, PROXY_PASS, 0
+    
+    ' Step 1: Login
+    Call Login
+    
+    ' Step 2: Get Data
     Call Get_Test_Count
 
 End Sub
 
 
-' 🔐 LOGIN WITH PROXY
-Sub Login_Octane()
+' 🔐 LOGIN (SESSION CREATED INTERNALLY)
+Sub Login()
 
-    Dim http As Object
     Dim url As String
-    Dim responseHeaders As String
+    Dim body As String
     
     url = BASE_URL & "/authentication/sign_in"
     
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    
     http.Open "POST", url, False
-    
-    ' 🌐 Set Proxy
-    http.SetProxy 2, PROXY_URL
-    
-    ' 🔑 Proxy Authentication
-    http.SetCredentials PROXY_USER, PROXY_PASS, 0   ' 0 = proxy auth
-    
     http.setRequestHeader "Content-Type", "application/json"
     
-    Dim body As String
-    body = "{""client_id"":""euruenbdiebdhejbdje"",""client_secret"":""biebj283bwu72@£&378beh""}"
+    body = "{""client_id"":""" & CLIENT_ID & """,""client_secret"":""" & CLIENT_SECRET & """}"
     
     http.Send body
     
-    responseHeaders = http.GetAllResponseHeaders
+    ' Debug
+    Debug.Print http.Status, http.StatusText
     
-    ' Extract cookies
-    LWSSO_COOKIE = ExtractCookie(responseHeaders, "LWSSO_COOKIE_KEY")
-    QCSession = ExtractCookie(responseHeaders, "QCSession")
-
 End Sub
 
 
-' 📊 GET DATA WITH PROXY
+' 📊 FETCH DATA
 Sub Get_Test_Count()
 
-    Dim http As Object
     Dim url As String
     Dim response As String
     Dim totalCount As String
     
-    url = BASE_URL & "/api/shared_spaces/1001/workspaces/2001/tests?limit=1&total_count=true&query=""(subtype='automated')"""
-    
-    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    url = BASE_URL & "/api/shared_spaces/501007/workspaces/3001/tests?limit=1&total_count=true&query=""(user_tags={id=105001})"""
     
     http.Open "GET", url, False
     
-    ' 🌐 Proxy
-    http.SetProxy 2, PROXY_URL
-    
-    ' 🔑 Proxy auth
-    http.SetCredentials PROXY_USER, PROXY_PASS, 0
-    
-    ' 🍪 Attach cookies
-    http.setRequestHeader "Cookie", "LWSSO_COOKIE_KEY=" & LWSSO_COOKIE & "; QCSession=" & QCSession
+    ' Required header
+    http.setRequestHeader "ALM-OCTANE-TECH-PREVIEW", "false"
     
     http.Send
     
@@ -227,7 +70,7 @@ Sub Get_Test_Count()
     
     totalCount = ExtractTotalCount(response)
     
-    ' Write to Excel
+    ' Output to Excel
     Sheet1.Range("A1").Value = "Automated Test Count"
     Sheet1.Range("B1").Value = totalCount
     Sheet1.Range("A2").Value = "Last Updated"
@@ -236,25 +79,7 @@ Sub Get_Test_Count()
 End Sub
 
 
-' 🍪 COOKIE PARSER
-Function ExtractCookie(headers As String, cookieName As String) As String
-
-    Dim lines() As String
-    Dim i As Integer
-    
-    lines = Split(headers, vbCrLf)
-    
-    For i = 0 To UBound(lines)
-        If InStr(lines(i), cookieName) > 0 Then
-            ExtractCookie = Split(Split(lines(i), cookieName & "=")(1), ";")(0)
-            Exit Function
-        End If
-    Next i
-
-End Function
-
-
-' 🔍 JSON PARSER
+' 🔍 PARSE total_count
 Function ExtractTotalCount(response As String) As String
 
     Dim startPos As Long
@@ -268,21 +93,11 @@ Function ExtractTotalCount(response As String) As String
 End Function
 
 
-' 🔁 AUTO REFRESH (5 mins)
+' 🔁 AUTO REFRESH
 Sub Start_Auto_Refresh()
 
     Call Fetch_Octane_Data
     
     Application.OnTime Now + TimeValue("00:05:00"), "Start_Auto_Refresh"
-
-End Sub
-
-
-' 🛑 STOP
-Sub Stop_Auto_Refresh()
-
-    On Error Resume Next
-    Application.OnTime EarliestTime:=Now + TimeValue("00:05:00"), _
-        Procedure:="Start_Auto_Refresh", Schedule:=False
 
 End Sub
