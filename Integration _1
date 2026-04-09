@@ -186,3 +186,29 @@ Function ExtractTotalCount(response As String) As String
     ExtractTotalCount = Trim(Mid(response, startPos, endPos - startPos))
 
 End Function
+
+
+
+
+    ' -----------------------------------------------
+                ' STEP A: Copy A6:D12 and paste values into A2:D8
+                ' (shift-up the historical rows before adding new month)
+                ' -----------------------------------------------
+                Dim srcRange  As Object
+                Dim destRange As Object
+
+                Set srcRange  = oSheet.Range("A6:D12")
+                Set destRange = oSheet.Range("A2:D8")
+
+                destRange.Value = srcRange.Value   ' values-only paste (no formats)
+
+                ' -----------------------------------------------
+                ' STEP B: Write current month+year into A10
+                ' Format: "Mar-26"
+                ' -----------------------------------------------
+                oSheet.Cells(10, 1).Value = Format(Now(), "MMM-yy")
+
+                ' -----------------------------------------------
+                ' STEP C: Write the fresh Octane counts into
+                ' their respective columns on ROW_DATA (row 10)
+                ' -----------------------------------------------
